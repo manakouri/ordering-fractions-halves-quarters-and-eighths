@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraction Sorter Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .card {
+            background-color: white;
+            border-radius: 1rem;
+            padding: 2rem;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+        .fraction {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 2.25rem;
+            font-weight: 700;
+            line-height: 1;
+            margin: 0 0.5rem;
+        }
+        .fraction .numerator {
+            padding: 0 0.5rem;
+        }
+        .fraction .denominator {
+            border-top: 3px solid black;
+            padding: 0 0.5rem;
+        }
+        .fraction-input {
+            width: 4rem;
+            text-align: center;
+            font-size: 1.875rem;
+            font-weight: 700;
+            border: 2px solid #d1d5db;
+            border-radius: 0.5rem;
+        }
+        .drop-zone {
+            border: 3px dashed #9ca3af;
+            border-radius: 1rem;
+            min-height: 100px;
+            width: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            transition: background-color 0.2s, border-color 0.2s;
+            padding: 0.5rem;
+        }
+        .drop-zone.over {
+            background-color: #e0e7ff;
+            border-color: #4f46e5;
+        }
+        .draggable-fraction {
+            cursor: grab;
+            transition: transform 0.2s;
+            background-color: white; /* Ensure it's visible when dragged */
+        }
+        .draggable-fraction:active {
+            cursor: grabbing;
+            transform: scale(1.1);
+        }
+        .original-fraction-reveal {
+            font-size: 1.125rem;
+            color: #4f46e5;
+            margin-top: 0.5rem;
+            font-weight: 500;
+        }
+        .feedback-correct { color: #22c55e; }
+        .feedback-incorrect { color: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="card w-full max-w-2xl text-center">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Fraction Sorter</h1>
+        
+        <div id="game-area">
+            <p id="instruction-text" class="text-gray-600 mb-6 text-lg">First, make all fractions have the same denominator (8).</p>
+            <div id="equivalents-container" class="flex flex-col md:flex-row items-center justify-around space-y-6 md:space-y-0 md:space-x-4 my-8 min-h-[100px]">
+                <!-- Fractions will be inserted here by JS -->
+            </div>
+            <button id="check-equivalents-btn" class="w-full md:w-1/2 mx-auto bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">
+                Check Equivalents
+            </button>
+        </div>
+
+        <!-- Ordering step appears here -->
+        <div id="ordering-area" class="hidden">
+            <div id="drop-zones-container" class="flex items-start justify-around space-x-2 md:space-x-4">
+                <div class="text-center">
+                    <div class="drop-zone" data-order="0"></div>
+                    <p class="mt-2 font-semibold text-gray-700">Smallest</p>
+                </div>
+                <div class="text-center">
+                    <div class="drop-zone" data-order="1"></div>
+                    <p class="mt-2 font-semibold text-gray-700">Middle</p>
+                </div>
+                <div class="text-center">
+                    <div class="drop-zone" data-order="2"></div>
+                    <p class="mt-2 font-semibold text-gray-700">Largest</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="feedback-area" class="mt-6 h-12 flex items-center justify-center">
+            <p id="feedback-text" class="text-xl font-medium"></p>
+        </div>
+        
+        <button id="next-question-btn" class="hidden w-full md:w-1/2 mx-auto mt-4 bg-green-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-transform transform hover:scale-105">
+            Next Question
+        </button>
+
+    </div>
+
+    <script>
+        // --- DOM Element References ---
+        const instructionText = document.getElementById('instruction-text');
+        const equivalentsContainer = document.getElementById('equivalents-container');
+        const checkEquivalentsBtn = document.getElementById('check-equivalents-btn');
+        const orderingArea = document.getElementById('ordering-area');
+        const dropZones = document.querySelectorAll('.drop-zone');
+        const feedbackText = document.getElementById('feedback-text');
+        const nextQuestionBtn = document.getElementById('next-question-btn');
+
+        // --- Game State ---
+        let currentFractions = [];
+        let sortedFractions = [];
+
+        // --- Fraction Data ---
+        const fractionPool = [
+            { n: 1, d: 2, value: 1/2 }, { n: 1, d: 4, value: 1/4 }, { n: 3, d: 4, value: 3/4 },
+            { n: 1, d: 8, value: 1/8 }, { n: 3, d: 8, value: 3/8 }, { n: 5, d: 8, value: 5/8 }, { n: 7, d: 8, value: 7/8 }
+        ];
+
+        /**
+         * Generates a new round of the game.
+         */
+        function startNewRound() {
+            // 1. Reset UI
+            instructionText.textContent = 'First, make all fractions have the same denominator (8).';
+            checkEquivalentsBtn.classList.remove('hidden');
+            nextQuestionBtn.classList.add('hidden');
+            orderingArea.classList.add('hidden');
+            feedbackText.textContent = '';
+            equivalentsContainer.innerHTML = '';
+            dropZones.forEach(dz => {
+                dz.innerHTML = '';
+                dz.dataset.filled = 'false';
+            });
+
+            // 2. Generate new fractions
+            let poolCopy = [...fractionPool];
+            currentFractions = [];
+            for (let i = 0; i < 3; i++) {
+                const randomIndex = Math.floor(Math.random() * poolCopy.length);
+                currentFractions.push(poolCopy.splice(randomIndex, 1)[0]);
+            }
+            
+            // 3. Create sorted version for checking later
+            sortedFractions = [...currentFractions].sort((a, b) => a.value - b.value);
+
+            // 4. Display Step 1
+            displayEquivalentsStep();
+        }
+
+        /**
+         * Sets up the equivalent fractions part of the game.
+         */
+        function displayEquivalentsStep() {
+            let containerHTML = '';
+            currentFractions.forEach((frac, index) => {
+                const equivalentNumerator = frac.n * (8 / frac.d);
+                containerHTML += `
+                    <div class="flex items-center justify-center" id="equiv-block-${index}">
+                        <div class="fraction">
+                            <span class="numerator">${frac.n}</span>
+                            <span class="denominator">${frac.d}</span>
+                        </div>
+                        <span class="text-3xl font-bold mx-2 text-gray-500">=</span>
+                        <div class="fraction">
+                            <input type="number" class="fraction-input" data-correct="${equivalentNumerator}" id="input-${index}">
+                            <span class="denominator">8</span>
+                        </div>
+                    </div>
+                `;
+            });
+            equivalentsContainer.innerHTML = containerHTML;
+        }
+
+        /**
+         * Checks if the user-entered equivalent fractions are correct.
+         */
+        function checkEquivalents() {
+            let allCorrect = true;
+            const enteredValues = [];
+            for (let i = 0; i < currentFractions.length; i++) {
+                const input = document.getElementById(`input-${i}`);
+                const correctValue = parseInt(input.dataset.correct);
+                const userValue = parseInt(input.value);
+                if (userValue !== correctValue) {
+                    allCorrect = false;
+                }
+                enteredValues.push(userValue);
+            }
+
+            if (allCorrect) {
+                feedbackText.textContent = 'Perfect! Now order your new fractions.';
+                feedbackText.className = 'text-xl font-medium feedback-correct';
+                instructionText.textContent = 'Drag your new fractions into the boxes to order them from smallest to largest.';
+                checkEquivalentsBtn.classList.add('hidden');
+                
+                // Transform inputs into draggable fractions
+                currentFractions.forEach((frac, index) => {
+                    const block = document.getElementById(`equiv-block-${index}`);
+                    const originalFraction = currentFractions.find(f => f.value === frac.value);
+                    block.innerHTML = `
+                        <div class="fraction draggable-fraction" draggable="true" id="frac-${index}" data-value="${frac.value}" data-original-n="${originalFraction.n}" data-original-d="${originalFraction.d}">
+                            <span class="numerator">${enteredValues[index]}</span>
+                            <span class="denominator">8</span>
+                        </div>
+                    `;
+                });
+                
+                orderingArea.classList.remove('hidden');
+                addDragListeners();
+
+            } else {
+                feedbackText.textContent = 'Not quite. Check your calculations and try again.';
+                feedbackText.className = 'text-xl font-medium feedback-incorrect';
+            }
+        }
+
+        /**
+         * Adds all necessary drag-and-drop event listeners.
+         */
+        function addDragListeners() {
+            const draggables = document.querySelectorAll('.draggable-fraction');
+            draggables.forEach(draggable => {
+                draggable.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', e.target.id);
+                    setTimeout(() => {
+                        e.target.style.opacity = '0.5';
+                    }, 0);
+                });
+                draggable.addEventListener('dragend', (e) => {
+                     e.target.style.opacity = '1';
+                });
+            });
+
+            dropZones.forEach(zone => {
+                zone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    if (zone.dataset.filled === 'false') {
+                        zone.classList.add('over');
+                    }
+                });
+                zone.addEventListener('dragleave', () => {
+                    zone.classList.remove('over');
+                });
+                zone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('over');
+                    // Allow dropping only if the zone is empty
+                    if (zone.dataset.filled === 'true') return;
+
+                    const id = e.dataTransfer.getData('text/plain');
+                    const draggable = document.getElementById(id);
+                    // Prevent dropping an item back on itself
+                    if (draggable.parentElement === zone) return;
+
+                    zone.appendChild(draggable);
+                    draggable.style.cursor = 'default';
+                    zone.dataset.filled = 'true';
+                    checkOrder();
+                });
+            });
+        }
+        
+        /**
+         * Checks if the fractions are ordered correctly after dropping.
+         */
+        function checkOrder() {
+            const filledZones = Array.from(dropZones).filter(zone => zone.dataset.filled === 'true');
+            if (filledZones.length < 3) return; // Don't check until all are placed
+
+            let correctOrder = true;
+            for(let i = 0; i < 3; i++) {
+                const droppedFraction = dropZones[i].querySelector('.draggable-fraction');
+                if (!droppedFraction || parseFloat(droppedFraction.dataset.value) !== sortedFractions[i].value) {
+                    correctOrder = false;
+                    break;
+                }
+            }
+
+            if (correctOrder) {
+                feedbackText.textContent = 'Well done! You ordered them correctly!';
+                feedbackText.className = 'text-xl font-medium feedback-correct';
+                nextQuestionBtn.classList.remove('hidden');
+                
+                // Reveal original fractions
+                dropZones.forEach(zone => {
+                    const droppedFraction = zone.querySelector('.draggable-fraction');
+                    droppedFraction.draggable = false; // Disable further dragging
+                    const originalN = droppedFraction.dataset.originalN;
+                    const originalD = droppedFraction.dataset.originalD;
+                    
+                    const revealEl = document.createElement('div');
+                    revealEl.className = 'original-fraction-reveal';
+                    revealEl.innerHTML = `(was <div class="fraction" style="font-size: 1rem; margin: 0 0.25rem; display: inline-flex;"><span class="numerator">${originalN}</span><span class="denominator">${originalD}</span></div>)`;
+                    zone.appendChild(revealEl);
+                });
+
+            } else {
+                feedbackText.textContent = 'That order is incorrect. Try again!';
+                feedbackText.className = 'text-xl font-medium feedback-incorrect';
+                
+                // Reset for another try
+                setTimeout(() => {
+                    feedbackText.textContent = '';
+                    // Put fractions back
+                    dropZones.forEach(zone => {
+                        const droppedFraction = zone.querySelector('.draggable-fraction');
+                        if (droppedFraction) {
+                            const originalBlockId = `equiv-block-${droppedFraction.id.split('-')[1]}`;
+                            document.getElementById(originalBlockId).appendChild(droppedFraction);
+                            droppedFraction.style.cursor = 'grab';
+                        }
+                        zone.innerHTML = '';
+                        zone.dataset.filled = 'false';
+                    });
+                }, 2000);
+            }
+        }
+
+        // --- Event Listeners ---
+        checkEquivalentsBtn.addEventListener('click', checkEquivalents);
+        nextQuestionBtn.addEventListener('click', startNewRound);
+
+        // --- Initial Load ---
+        window.onload = startNewRound;
+    </script>
+</body>
+</html>
